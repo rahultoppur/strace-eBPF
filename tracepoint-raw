@@ -29,24 +29,12 @@ if args.pid:
 b = BPF(src_file=BPF_SRC_EDITED)
 
 # Print header
-print("COMM", "PID", "SYSCALL_ID", "ARGS[0]", "ARGS[1]", "ARGS[2]", "ARGS[3]", "ARGS[4]", "ARGS[5]")
-
-#def print_event_out(cpu, data, size):
-#    event = b["events_out"].event(data)
-
-#    sys_name = syscall_name(event.syscall_id).decode('utf-8')
-#    print(f"{event.comm} | {sys_name}={event.ret}")
-
-    #if event.syscall_id == 231:
-    #    print("exit_group() received, stopping trace...", "*" * 40)
-    #    os._exit(0)
+print("Beginning tracing...")
 
 def print_event(cpu, data, size):
     event = b["events"].event(data)
 
-
     # Map each syscall to its corresponding format string
-    
     print_format = { 
             0   : f"(FD: {event.fd} | BUF: {event.argv0}... | COUNT: {event.count})",
             1   : f"(FD: {event.fd} | BUF: {event.argv0}... | COUNT: {event.count})",
@@ -68,36 +56,26 @@ def print_event(cpu, data, size):
             257 : f"(FD: {event.fd} | FILENAME: {event.argv0} | FLAGS: {event.flags} | MODE: {event.mode})",
             266 : f"(OLDNAME: {event.argv1} | NEWFD: {event.fd} | NEWNAME: {event.argv2})",
      }
-    
 
     sys_name = syscall_name(event.syscall_id).decode('utf-8')
     
     try:
         syscall_args = print_format[event.syscall_id]
         print(f"{event.comm} | {sys_name}{syscall_args}={event.ret}")
-        #print(f"{event.comm} | {sys_name}={event.ret}")
     except:
-        # Syscall not yet supported--just print out it's name and 
-        # char representation of its arguments
-        #print(f"{sys_name}(...)")
+        # Syscall not yet supported--just print out it's name and char 
+        # representation of its arguments
         print(f"{event.comm} | {sys_name}({event.argv0} | {event.argv1} | {event.argv2} | {event.argv3})={event.ret}")
-        #pass
 
-    # If we see syscall ID 231 (exit_group), log entry and stop tracing
-    #if event.syscall_id == 231 and event.comm == b"python3":
-    #if event.syscall_id == 231:
+    # If end is set, stop tracing
     if event.end:
         print("exit_group() received, stopping trace...", "*" * 40)
         os._exit(0)
 
 # Increase the page count to minimize number of lost events
 b["events"].open_perf_buffer(print_event, page_cnt=16)
-#b["events_out"].open_perf_buffer(print_event_out, page_cnt=8)
 while 1:
     try:
-        #for k, v in b["map"].items():
-        #    print(f"{k}, PID: {v.pid}, Syscall id: {v.syscall_id}, Fd: {v.fd}, Return: {v.ret}")
-        #time.sleep(2) 
         b.perf_buffer_poll()
     except KeyboardInterrupt:
         break
