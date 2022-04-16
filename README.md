@@ -18,6 +18,6 @@ Make sure that the command you pass in is quoted.
 ## Dependencies
 `strace-eBPF` is written using Python and bcc (BPF compiler collection). Installation pre-requisites can be found [here](https://github.com/iovisor/bcc/blob/master/INSTALL.md). Supporting documentation for bcc can be found [here](https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md).
 
-eBPF is extremely kernel-specific. Especially for bcc, some features are availabe in specific kernel versions, while others are not. This implementation of `strace` was tested on Ubuntu 20.04.3, with the kernel version: 5.4.0-107-generic.
+eBPF is extremely kernel-specific. Especially for bcc, some features are available in specific kernel versions, while others are not. This implementation of `strace` was tested on `Ubuntu 20.04.3`, with the kernel version: `5.4.0-107-generic`.
 
 
