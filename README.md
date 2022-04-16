@@ -13,7 +13,7 @@ Return values are also traced for each syscall. Similar to that of `strace`, the
 ./my_strace "cat hello"
 ```
 
-Make sure that the command you pass in is quoted.
+Make sure that the command you pass in is quoted. You need to run this command as root.
 
 ## Dependencies
 `strace-eBPF` is written using Python and bcc (BPF compiler collection). Installation pre-requisites can be found [here](https://github.com/iovisor/bcc/blob/master/INSTALL.md). Supporting documentation for bcc can be found [here](https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md).
