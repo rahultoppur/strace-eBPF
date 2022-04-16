@@ -8,6 +8,11 @@ A simplified version of `strace` made using `eBPF`.
 
 Return values are also traced for each syscall. Similar to that of `strace`, the return value is present after the `=` sign for each syscall.
 
+This project is comprised of three main components:
+(1) `strace.c` : Raw BPF program written in C that uses tracepoints to gather tracing information
+(2) `tracepoint-raw.py` : Python wrapper that created the BPF program and prints output
+(3) `my_strace` : Script that `forks` a parent and a child. Parent runs the tracer, while the child runs the tracee.
+
 ## Usage
 ```
 ./my_strace "cat hello"
