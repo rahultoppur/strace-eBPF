@@ -12,18 +12,18 @@ parser.add_argument('cmd', help="The command to trace (in quotes).")
 args = parser.parse_args()
 
 """
-
 We don't want to wait within the parent--we want the child
 and the parent to run (almost) simulataneously, so that we
 can start tracing within the parent immediately.
-
 """
 def main():
     newpid = os.fork()
    
     if (newpid == 0):
+        # Give the parent some time to allow it to start tracing
+        # before we run the child.
         time.sleep(2)
-        # We are within the child. Execute our command.
+        # Execute our command.
         subprocess.run(args.cmd.split())
     else:
         # We are within the parent (Parent PID, child PID)
