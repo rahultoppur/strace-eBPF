@@ -11,7 +11,7 @@ Return values are also traced for each syscall. Similar to that of `strace`, the
 This project is comprised of three main components:
 
 1. `strace.c`: Raw BPF program written in C that uses tracepoints to gather tracing information
-2. `tracepoint-raw`: Python wrapper that created the BPF program and prints output
+2. `tracepoint-raw`: Python wrapper that creates the BPF program and prints output
 3. `my_strace`: Small script that `forks`. The parent runs the tracer (2), while the child runs the tracee (the program getting traced).
 
 ## Usage
