@@ -32,6 +32,10 @@ def main():
         subprocess.run(["./tracepoint-raw", "-p", str(newpid)])
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("End tracing...")
+        exit()
 
 
