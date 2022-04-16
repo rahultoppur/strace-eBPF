@@ -1,7 +1,8 @@
-#include <linux/sched.h>
+#include <linux/sched.h> 
 #include <linux/socket.h>
 #include <linux/types.h>
 #include <linux/dirent.h>
+#include <uapi/linux/in.h>
 #include <asm/fcntl.h>
 #include <asm/unistd_64.h>
 
@@ -37,21 +38,28 @@ struct data_t {
     /* IP-specific details */
     u32 s_addr;
     u16 port;
-    long ret;
 
-    int end; /* end tracing flag */
+    /* Return value */
+    long ret; 
+
+    /* Used by mmap, statfs, brk */
+    long address; 
+
+    /* Should we stop tracing? */
+    int end; 
 };
 
 /* 
  * Create hashmap from syscall ID to data_t entry. 
- * Will then lookup in exit and fill out return code,
- * then submit to buffer
+ * Lookup syscall in exit tracepoint to fill out
+ * return code, then submit to buffer.
  */
 BPF_HASH(map, int, struct data_t); 
 BPF_PERF_OUTPUT(events);
 
 TRACEPOINT_PROBE(raw_syscalls, sys_exit)
 {
+    /* Trace if PID or PPID matches filter */
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct task_struct *task;
     task = (struct task_struct *)bpf_get_current_task();
@@ -91,54 +99,73 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
     bpf_get_current_comm(&data.comm, sizeof(data.comm));
     
     switch(args->id) {
-        case __NR_read: /* READ */
+        case __NR_read: 
         {
             data.fd = args->args[0];                                                /* fd */ 
-            bpf_probe_read(&data.argv0, sizeof(data.argv0), (void *)args->args[1]); /* buf */
             data.count = args->args[2];                                             /* bytes read */
+            bpf_probe_read(&data.argv0, sizeof(data.argv0), (void *)args->args[1]); /* buf */
             break; 
         }
-        case __NR_write: /* WRITE */
+        case __NR_write: 
         {
             data.fd = args->args[0];                                                /* fd */ 
             bpf_probe_read(&data.argv0, sizeof(data.argv0), (void *)args->args[1]); /* buf */
             data.count = args->args[2];                                             /* bytes written */
             break;
         }
-        case __NR_open: /* OPEN */
+        case __NR_open: 
         {
             bpf_probe_read(&data.filename, sizeof(data.filename), (void *)args->args[0]); /* filename */
             data.flags = args->args[1];                                                   /* flags */
             data.mode = args->args[2];                                                    /* mode */
             break;
         }
-        case __NR_close: /* CLOSE */
+        case __NR_close: 
         {
             data.fd = args->args[0]; /* fd */
             break;
         }
-        case __NR_fstat: /* FSTAT */
+        case __NR_fstat: 
         {
             data.fd = args->args[0]; /* fd */
             break;
         }
-        case __NR_access: /* ACCESS */
+        case __NR_mmap:
+        {
+            data.address = args->args[0]; /* address */
+            data.fd = args->args[4];      /* fd */
+            break;
+        }
+        case __NR_brk:
+        {  
+            data.address = args->args[0]; /* address */
+            break;
+        }
+        case __NR_pread64:
+        {
+            data.fd = args->args[0];
+            bpf_probe_read_str(&data.argv0, sizeof(data.argv0), (void *)args->args[1]); /* buf */
+            data.count = args->args[2];                                                 /* count */
+            break;
+        }
+        case __NR_access: 
         {
             bpf_probe_read(&data.filename, sizeof(data.filename), (void *)args->args[0]); /* filename */
             data.mode = args->args[1];                                                    /* mode */
+            break;
         }
-        case __NR_dup: /* DUP */
+        case __NR_dup: 
         {
             data.fd = args->args[0]; /* fd */
             break;
         }
-        case __NR_dup2: /* DUP2 */
+        case __NR_dup2: 
         {
             data.fd = args->args[0];     /* fd */
             data.new_fd = args->args[1]; /* new fd */
             break;
         }
-        case __NR_connect: /* CONNECT */
+        case __NR_connect: 
         {
             /* socket-specific details for obtaining IP */
             struct sockaddr* sock;
@@ -148,47 +175,53 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
             data.port = addr_in->sin_port;                              /* port */
             break;
         }
-        case __NR_execve: /* EXECVE */
+        case __NR_execve: 
         {
             char *my_args[4];  /* Only store up to 4 args for argv */
             bpf_probe_read(&my_args, sizeof(my_args), (void *)args->args[1]); 
-            bpf_probe_read_str(&data.filename, sizeof(data.filename), (void *)args->args[0]); /* filename */
-            bpf_probe_read_str(&data.argv0, sizeof(data.argv1), (void *)my_args[0]);          /* argv[0] */
-            bpf_probe_read_str(&data.argv1, sizeof(data.argv1), (void *)my_args[1]);          /* argv[1] */
-            bpf_probe_read_str(&data.argv2, sizeof(data.argv1), (void *)my_args[2]);          /* argv[2] */
-            bpf_probe_read_str(&data.argv3, sizeof(data.argv1), (void *)my_args[3]);          /* argv[3] */
+            bpf_probe_read(&data.filename, sizeof(data.filename), (void *)args->args[0]); /* filename */
+            bpf_probe_read(&data.argv0, sizeof(data.argv1), (void *)my_args[0]);          /* argv[0] */
+            bpf_probe_read(&data.argv1, sizeof(data.argv1), (void *)my_args[1]);          /* argv[1] */
+            bpf_probe_read(&data.argv2, sizeof(data.argv1), (void *)my_args[2]);          /* argv[2] */
+            bpf_probe_read(&data.argv3, sizeof(data.argv1), (void *)my_args[3]);          /* argv[3] */
             break;
         }
-        case __NR_kill: /* KILL */
+        case __NR_kill: 
         {
-            data.pid = args->args[0];       /* pid */
-            data.signal = args->args[1];    /* signal */
+            data.pid = args->args[0];    /* pid */
+            data.signal = args->args[1]; /* signal */
             break;
         }
-        case __NR_link: /* LINK */
+        case __NR_link: 
         {
             bpf_probe_read(&data.argv1, sizeof(data.argv1), (void *)args->args[1]); /* old name */
             bpf_probe_read(&data.argv2, sizeof(data.argv2), (void *)args->args[2]); /* new name */
             break;
         }
-        case __NR_unlink: /* UNLINK */
+        case __NR_unlink: 
         {
             bpf_probe_read(&data.argv0, sizeof(data.argv0), (void *)args->args[0]); /* pathname */
             break;
         }
-        case __NR_symlink: /* SYMLINK */
+        case __NR_symlink:
         {
             bpf_probe_read(&data.argv1, sizeof(data.argv1), (void *)args->args[1]); /* old name */
             bpf_probe_read(&data.argv2, sizeof(data.argv2), (void *)args->args[2]); /* new name */
             break;
         }
-        case __NR_chmod: /* CHMOD */
+        case __NR_chmod:
         {
             bpf_probe_read(&data.filename, sizeof(data.filename), (void *)args->args[0]); /* filename */
             data.mode = args->args[1];                                                    /* mode */
             break;
         }
-        case __NR_getdents64: /* GETDENTS64 */
+        case __NR_statfs:
+        {
+            bpf_probe_read(&data.argv0, sizeof(data.argv0), (void *)args->args[0]); /* pathname */
+            data.address = args->args[1];                                           /* address */
+            break;
+        }
+        case __NR_getdents64: 
         {
             /* Store only a single filename */
             struct linux_dirent64 dir_entries[2];
@@ -201,14 +234,14 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
             bpf_probe_read(&data.argv0, sizeof(data.argv0), (char *)dir_entries[0].d_name); /* Filenames */
             break;
         }
-        case __NR_exit_group: /* EXIT_GROUP */
+        case __NR_exit_group: 
         {
             data.count = args->args[0];
-            data.end = 1; /* Set end tracing to 1 if we see exit_group() syscall */
-            events.perf_submit(args, &data, sizeof(data)); /* Submit record to be handled in perf buffer */
+            data.end = 1;                                  /* Set end tracing to 1 if we see call to exit_group */
+            events.perf_submit(args, &data, sizeof(data)); /* Submit record to be handled by the perf buffer */
             break;
         }
-        case __NR_openat: /* OPENAT */
+        case __NR_openat: 
         {
             data.fd = args->args[0];                                                      /* fd */
             bpf_probe_read(&data.argv0, sizeof(data.argv0), (const char*)args->args[1]);  /* filename */
@@ -216,7 +249,7 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
             data.mode = args->args[3];                                                    /* file mode */
             break;
         }
-        case __NR_symlinkat: /* SYMLINKAT */
+        case __NR_symlinkat: 
         {   
             bpf_probe_read(&data.argv1, sizeof(data.argv1), (void *)args->args[0]); /* old name */
             data.fd = args->args[1];                                                /* new fd */
@@ -224,7 +257,7 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
             break;
         }
         default:
-            // Just populate argv0 -> argv3 with char representation of values? Not sure...
+            /* Just populate argv0 -> argv3 with char representation of values for now */
             bpf_probe_read(&data.argv0, sizeof(data.argv0), (const char*)args->args[0]);  
             bpf_probe_read(&data.argv1, sizeof(data.argv1), (const char*)args->args[1]);  
             bpf_probe_read(&data.argv2, sizeof(data.argv2), (const char*)args->args[2]);  
@@ -232,8 +265,7 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
             break;
     }
     
-    /* Make key syscall ID */
-    int key = (int)args->id; 
+    int key = (int)args->id; /* Make key syscall ID */
     /* 
      * Update map regardless--always want syscall ID
      * to point to latest data entry

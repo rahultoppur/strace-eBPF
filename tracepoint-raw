@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
+import argparse
 from bcc import BPF
 from bcc.syscall import syscalls, syscall_name
-import time
-import argparse
-import sys
 import os
-from ctypes import *
 import socket, struct
+from sys_const import *
 
 BPF_SRC = "strace.c"
 BPF_SRC_EDITED = "strace_edited.c"
@@ -31,40 +29,44 @@ b = BPF(src_file=BPF_SRC_EDITED)
 # Print header
 print("Beginning tracing...")
 
+# Callback for submitting events to perf_buffer
 def print_event(cpu, data, size):
     event = b["events"].event(data)
 
     # Map each syscall to its corresponding format string
     print_format = { 
-            0   : f"(FD: {event.fd} | BUF: {event.argv0}... | COUNT: {event.count})",
-            1   : f"(FD: {event.fd} | BUF: {event.argv0}... | COUNT: {event.count})",
-            2   : f"(FILENAME: {event.filename} | FLAGS: {event.flags} | MODE: {event.mode})",
-            3   : f"(FD: {event.fd})",
-            5   : f"(FD: {event.fd})",
-            21  : F"(FILENAME: {event.filename} | MODE: {event.mode})",
-            32  : f"(FD: {event.fd})",
-            33  : f"(OLD FD: {event.fd} | NEW FD: {event.new_fd})",
-            42  : f"(IP: {socket.inet_ntoa(struct.pack('<L', event.s_addr))} | PORT: {event.port})",
-            59  : f"(FD: {event.fd} | FILENAME: {event.filename} | ARGV0: {event.argv0} | ARGV1: {event.argv1} | ARGV2: {event.argv2} | ARGV3: {event.argv3} |)",
-            62  : f"(PID: {event.pid} | SIGNAL: {event.signal})",
-            86  : f"(OLDNAME: {event.argv1} | NEWNAME: {event.argv2})",
-            87  : f"(PATHNAME: {event.argv0})",
-            88  : f"(OLDNAME: {event.argv1} | NEWNAME: {event.argv2})",
-            90  : f"(FILENAME: {event.filename} | MODE: {event.mode})",
-            217 : f"(FD: {event.fd} | FILE INFO: [d_name={event.argv0}, d_ino={event.d_inode}, d_type={event.d_type}, d_reclen={event.d_reclen}...])",
-            231 : f"(ERRORCODE: {event.count})",
-            257 : f"(FD: {event.fd} | FILENAME: {event.argv0} | FLAGS: {event.flags} | MODE: {event.mode})",
-            266 : f"(OLDNAME: {event.argv1} | NEWFD: {event.fd} | NEWNAME: {event.argv2})",
+            SYS_READ       : f"(FD: {event.fd} | BUF: {event.argv0}... | COUNT: {event.count})={event.ret}",
+            SYS_WRITE      : f"(FD: {event.fd} | BUF: {event.argv0}... | COUNT: {event.count})={event.ret}",
+            SYS_OPEN       : f"(FILENAME: {event.filename} | FLAGS: {event.flags} | MODE: {event.mode})={event.ret}",
+            SYS_CLOSE      : f"(FD: {event.fd})={event.ret}",
+            SYS_FSTAT      : f"(FD: {event.fd})={event.ret}",
+            SYS_MMAP       : f"(ADDR: {hex(event.address)} | FD: {event.fd})={hex(event.ret)}",
+            SYS_BRK        : f"(ADDR: {hex(event.address)})={hex(event.ret)}",
+            SYS_PREAD      : f"(FD: {event.fd} | BUF: {event.argv0} | COUNT: {event.count})={event.ret}",
+            SYS_ACCESS     : F"(FILENAME: {event.filename} | MODE: {event.mode})={event.ret}",
+            SYS_DUP        : f"(FD: {event.fd})={event.ret}",
+            SYS_DUP2       : f"(OLD FD: {event.fd} | NEW FD: {event.new_fd})={event.ret}",
+            SYS_CONNECT    : f"(IP: {socket.inet_ntoa(struct.pack('<L', event.s_addr))} | PORT: {event.port})={event.ret}",
+            SYS_EXECVE     : f"(FD: {event.fd} | FILENAME: {event.filename} | ARGV0: {event.argv0} | ARGV1: {event.argv1} | ARGV2: {event.argv2} | ARGV3: {event.argv3} |)={event.ret}",
+            SYS_KILL       : f"(PID: {event.pid} | SIGNAL: {event.signal})={event.ret}",
+            SYS_LINK       : f"(OLDNAME: {event.argv1} | NEWNAME: {event.argv2})={event.ret}",
+            SYS_UNLINK     : f"(PATH: {event.argv0})={event.ret}",
+            SYS_SYMLINK    : f"(OLDNAME: {event.argv1} | NEWNAME: {event.argv2})={event.ret}",
+            SYS_CHMOD      : f"(FILENAME: {event.filename} | MODE: {event.mode})={event.ret}",
+            SYS_STATFS     : f"(PATH: {event.argv0} | {hex(event.address)})={event.ret}",
+            SYS_GETDENTS64 : f"(FD: {event.fd} | FILE INFO: [d_name={event.argv0}, d_ino={event.d_inode}, d_type={event.d_type}, d_reclen={event.d_reclen}...])={event.ret}",
+            SYS_EXIT_GROUP : f"(ERRORCODE: {event.count})={event.ret}",
+            SYS_OPENAT     : f"(FD: {event.fd} | FILENAME: {event.argv0} | FLAGS: {event.flags} | MODE: {event.mode})={event.ret}",
+            SYS_SYMLINKAT  : f"(OLDNAME: {event.argv1} | NEWFD: {event.fd} | NEWNAME: {event.argv2})={event.ret}",
      }
 
     sys_name = syscall_name(event.syscall_id).decode('utf-8')
-    
+   
     try:
         syscall_args = print_format[event.syscall_id]
-        print(f"{event.comm} | {sys_name}{syscall_args}={event.ret}")
+        print(f"{event.comm} | {sys_name}{syscall_args}")
     except:
-        # Syscall not yet supported--just print out it's name and char 
-        # representation of its arguments
+        # Syscall not yet supported--just print out it's name and char representation of arguments
         print(f"{event.comm} | {sys_name}({event.argv0} | {event.argv1} | {event.argv2} | {event.argv3})={event.ret}")
 
     # If end is set, stop tracing
@@ -72,8 +74,7 @@ def print_event(cpu, data, size):
         print("exit_group() received, stopping trace...", "*" * 40)
         os._exit(0)
 
-# Increase the page count to minimize number of lost events
-b["events"].open_perf_buffer(print_event, page_cnt=16)
+b["events"].open_perf_buffer(print_event, page_cnt=16) # Increase page count to minimize number of lost events
 while 1:
     try:
         b.perf_buffer_poll()

@@ -1,1 +1,23 @@
 # strace-eBPF
+
+A simplified version of `strace` made using `eBPF`. 
+
+## General Approach
+
+`strace-eBPF` makes use of kernel tracepoints (specifically `sys_enter` and `sys_exit`) to trace the underlying syscalls made by a program. Currently, ~25 syscalls are supported, which means that the respective arguments present in each register are formatted. For the other syscalls that are made, the register contents are dumped and displayed as bytestrings. 
+
+Return values are also traced for each syscall. Similar to that of `strace`, the return value is present after the `=` sign for each syscall.
+
+## Usage
+```
+./my_strace "cat hello"
+```
+
+Make sure that the command you pass in is quoted.
+
+## Dependencies
+`strace-eBPF` is written using Python and bcc (BPF compiler collection). Installation pre-requisites can be found [here](https://github.com/iovisor/bcc/blob/master/INSTALL.md). Supporting documentation for bcc can be found [here](https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md).
+
+eBPF is extremely kernel-specific. Especially for bcc, some features are availabe in specific kernel versions, while others are not. This implementation of `strace` was tested on Ubuntu 20.04.3, with the kernel version: 5.4.0-107-generic.
+
+
